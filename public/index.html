@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tour Director Pro</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzJhMmEyYSIvPgogIDx0ZXh0IHg9IjE2IiB5PSIyMyIgZm9udC1zaXplPSIyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFwcGxlIENvbG9yIEVtb2ppLFNlZ29lIFVJIEVtb2ppLE5vdG8gQ29sb3IgRW1vamksc2Fucy1zZXJpZiI+8J+ajDwvdGV4dD4KPC9zdmc+">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+  FIREBASE SETUP INSTRUCTIONS
+  ───────────────────────────────────────────────────────────────────────────
+  1. Go to https://console.firebase.google.com and create a new project.
+  2. In your project, click "Add app" → Web app. Copy the firebaseConfig object
+     and paste it into the FIREBASE CONFIG section below (replacing the
+     placeholder values).
+  3. In the Firebase console, enable:
+       Authentication → Sign-in providers → Google
+       Authentication → Sign-in providers → Email/Password
+       Firestore Database → Create database (start in production mode)
+  4. In Firestore → Rules, paste these security rules:
+       rules_version = '2';
+       service cloud.firestore {
+         match /databases/{database}/documents {
+           match /users/{userId} {
+             allow read, write: if request.auth != null && request.auth.uid == userId;
+           }
+           match /users/{userId}/{document=**} {
+             allow read, write: if request.auth != null && request.auth.uid == userId;
+           }
+         }
+       }
+  5. To deploy: install Firebase CLI (npm install -g firebase-tools),
+     run "firebase login" then "firebase init hosting" and deploy
+     with "firebase deploy".
+  ═══════════════════════════════════════════════════════════════════════════ -->
+
+<!-- Firebase v10 SDK (modular via CDN compat shim) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// FIREBASE CONFIG — replace with your project's values from the Firebase console
+// ═══════════════════════════════════════════════════════════════════════════
+// ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+// ─────────────────────────────────────────────────────────────────────────
+
+// These are set after DOM loads in initApp()
+let auth = null, db = null;
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1e1e1e;
+    --surface: #2a2a2a;
+    --surface2: #323232;
+    --surface3: #3a3a3a;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f0;
+    --text2: #a8a8a8;
+    --text3: #686868;
+    --accent: #3a8ef6;
+    --accent2: #5aa0f8;
+    --accent-soft: rgba(58,142,246,0.15);
+    --green: #34c759;
+    --green-soft: rgba(52,199,89,0.15);
+    --red: #ff453a;
+    --red-soft: rgba(255,69,58,0.12);
+    --orange: #ff9f0a;
+    --purple: #bf5af2;
+    --sidebar-w: 240px;
+    --titlebar-h: 38px;
+    --toolbar-h: 48px;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+    --font: 'DM Sans', -apple-system, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: #111;
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── SIGN-IN SCREEN ─── */
+  #signin-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 9999;
+  }
+  #signin-screen .signin-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 380px;
+    width: 90%;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+  #signin-screen .app-icon { font-size: 52px; margin-bottom: 12px; }
+  #signin-screen h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  #signin-screen p { font-size: 13px; color: var(--text2); margin-bottom: 28px; line-height: 1.6; }
+  .google-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 20px;
+    background: #fff;
+    color: #333;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font);
+  }
+  .google-btn:hover { background: #f0f0f0; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+  .google-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .signin-error {
+    font-size: 12px;
+    color: var(--red);
+    margin-top: 12px;
+    min-height: 16px;
+  }
+
+  /* ─── LOADING OVERLAY ─── */
+  #loading-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 9998;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-overlay p { font-size: 13px; color: var(--text2); }
+
+  /* ─── WINDOW CHROME ─── */
+  #app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  #titlebar {
+    background: rgba(30,30,30,0.95);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  #titlebar-row1 {
+    height: var(--titlebar-h);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    width: 100%;
+  }
+  #titlebar-row2 {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 16px 6px;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+  }
+  #titlebar-title {
+    flex: 1;
+    text-align: center;
+    font-size: 13px; font-weight: 600; color: var(--text2); letter-spacing: 0.2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0;
+  }
+  #user-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #user-avatar {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border2);
+    object-fit: cover;
+  }
+  #user-name { font-size: 12px; color: var(--text2); }
+  #sign-out-btn {
+    font-size: 11px;
+    color: var(--text3);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+  #sign-out-btn:hover { background: var(--surface2); color: var(--text2); }
+
+  /* ─── MAIN LAYOUT ─── */
+  #layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* ─── SIDEBAR ─── */
+  #sidebar {
+    width: var(--sidebar-w);
+    background: rgba(25,25,25,0.95);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0; overflow: hidden;
+  }
+  .sidebar-section { padding: 12px 8px 4px; }
+  .sidebar-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--text3); padding: 4px 8px; margin-bottom: 2px;
+  }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2);
+    transition: all 0.12s;
+  }
+  .sidebar-item:hover { background: var(--surface2); color: var(--text); }
+  .sidebar-item.active { background: var(--accent-soft); color: var(--accent2); }
+  .sidebar-item .icon { font-size: 14px; width: 18px; text-align: center; }
+  .sidebar-item .badge {
+    margin-left: auto; background: var(--accent); color: #fff;
+    font-size: 10px; font-weight: 700; padding: 1px 6px;
+    border-radius: 20px; min-width: 18px; text-align: center;
+  }
+  .sidebar-tours { flex: 1; overflow-y: auto; padding: 4px 8px 8px; }
+  .sidebar-tours::-webkit-scrollbar { width: 0; }
+  .tour-chip {
+    display: flex; align-items: center; padding: 8px 10px;
+    border-radius: var(--radius-sm); cursor: pointer;
+    transition: all 0.12s; gap: 10px;
+    border: 1px solid transparent; margin-bottom: 2px;
+  }
+  .tour-chip:hover { background: var(--surface2); }
+  .tour-chip.active { background: var(--accent-soft); border-color: rgba(58,142,246,0.25); }
+  .tour-chip .info { flex: 1; min-width: 0; }
+  .tour-chip .tname {
+    font-size: 12.5px; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tour-chip .tmeta { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .sidebar-bottom { padding: 10px; border-top: 1px solid var(--border); }
+  .btn-new-tour {
+    width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: var(--radius-sm); padding: 8px 12px; font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: var(--font);
+  }
+  .btn-new-tour:hover { background: #2a7be0; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(58,142,246,0.4); }
+  .sidebar-section-header {
+    display: flex; align-items: center; justify-content: space-between; padding: 0 8px;
+  }
+  .tours-count-badge {
+    background: var(--surface3); font-size: 10px; font-weight: 700;
+    color: var(--text3); padding: 1px 6px; border-radius: 10px;
+  }
+
+  /* ─── CONTENT ─── */
+  #content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+  #toolbar {
+    height: var(--toolbar-h); background: rgba(30,30,30,0.8);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 8px; flex-shrink: 0;
+  }
+  .toolbar-tabs {
+    display: flex; gap: 2px; background: var(--surface2);
+    border-radius: var(--radius-sm); padding: 3px;
+  }
+  .tab-btn {
+    padding: 5px 14px; border-radius: 4px; font-size: 12.5px; font-weight: 500;
+    cursor: pointer; border: none; background: transparent; color: var(--text2);
+    transition: all 0.15s; font-family: var(--font);
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--surface3); color: var(--text); box-shadow: var(--shadow-sm); }
+  .btn {
+    padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12.5px;
+    font-weight: 500; cursor: pointer; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text); transition: all 0.15s;
+    font-family: var(--font); display: flex; align-items: center; gap: 5px;
+  }
+  .btn:hover { background: var(--surface3); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .btn.primary:hover { background: #2a7be0; }
+  .btn.danger { background: var(--red-soft); border-color: rgba(255,69,58,0.3); color: var(--red); }
+  .btn.danger:hover { background: rgba(255,69,58,0.2); }
+  .btn.success { background: var(--green-soft); border-color: rgba(52,199,89,0.3); color: var(--green); }
+  .btn.success:hover { background: rgba(52,199,89,0.25); }
+  .ml-auto { margin-left: auto; }
+
+  /* ─── PANELS ─── */
+  #panel-area { flex: 1; overflow-y: auto; padding: 24px; }
+  #panel-area::-webkit-scrollbar { width: 6px; }
+  #panel-area::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ─── FORMS ─── */
+  .section-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+    animation: fadeSlide 0.25s ease both;
+  }
+  .section-card-title {
+    font-size: 13px; font-weight: 700; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.6px;
+    margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11.5px; font-weight: 600; color: var(--text2); letter-spacing: 0.2px; }
+  .field input, .field select, .field textarea {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px;
+    color: var(--text); font-family: var(--font); transition: all 0.15s; outline: none; width: 100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--accent); background: rgba(58,142,246,0.06);
+    box-shadow: 0 0 0 3px rgba(58,142,246,0.15);
+  }
+  .field textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+  .field select { appearance: none; cursor: pointer; }
+  .field input::placeholder { color: var(--text3); }
+  .field-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+  /* ─── DIETARY ─── */
+  .dietary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .dietary-tag {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); padding: 7px 10px;
+    cursor: pointer; transition: all 0.15s; font-size: 12.5px; font-weight: 500;
+  }
+  .dietary-tag.selected { background: var(--accent-soft); border-color: rgba(58,142,246,0.4); color: var(--accent2); }
+  .dietary-tag .count-input {
+    width: 44px; background: var(--surface3); border: 1px solid var(--border2);
+    border-radius: 4px; padding: 2px 6px; font-size: 12px; color: var(--text);
+    text-align: center; margin-left: auto;
+  }
+
+  /* ─── TOUR HEADER ─── */
+  .tour-header {
+    background: linear-gradient(135deg, rgba(58,142,246,0.12), rgba(191,90,242,0.06));
+    border: 1px solid rgba(58,142,246,0.2); border-radius: var(--radius);
+    padding: 20px 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 20px;
+  }
+  .tour-badge {
+    width: 52px; height: 52px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
+  }
+  .tour-info h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .tour-meta { display: flex; gap: 16px; }
+  .meta-item { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 5px; }
+
+  /* ─── EMPTY STATE ─── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 60vh; gap: 12px; color: var(--text3);
+  }
+  .empty-state .icon { font-size: 56px; opacity: 0.4; }
+  .empty-state h3 { font-size: 18px; font-weight: 600; color: var(--text2); }
+  .empty-state p { font-size: 13px; text-align: center; max-width: 300px; line-height: 1.6; }
+
+  /* ─── PROVIDERS ─── */
+  .provider-list { display: flex; flex-direction: column; gap: 10px; }
+  .provider-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; transition: all 0.15s;
+  }
+  .provider-card:hover { border-color: var(--border2); }
+  .provider-header {
+    display: flex; align-items: center; padding: 14px 16px; cursor: pointer;
+    gap: 12px; background: transparent; border: none; width: 100%;
+    text-align: left; color: var(--text); font-family: var(--font);
+  }
+  .provider-header:hover { background: rgba(255,255,255,0.02); }
+  .provider-num {
+    width: 26px; height: 26px; background: var(--surface3); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--text2); flex-shrink: 0;
+  }
+  .provider-name-display { flex: 1; font-size: 13.5px; font-weight: 600; }
+  .provider-status { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+  .provider-status.configured { background: var(--green-soft); color: var(--green); }
+  .provider-status.empty { background: var(--surface3); color: var(--text3); }
+  .provider-chevron { font-size: 10px; color: var(--text3); transition: transform 0.2s; }
+  .provider-card.open .provider-chevron { transform: rotate(90deg); }
+  .provider-body { display: none; padding: 16px; border-top: 1px solid var(--border); }
+  .provider-card.open .provider-body { display: block; }
+
+  /* ─── PARAMS ─── */
+  .params-help {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+    padding: 10px 12px; background: var(--surface2);
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
+  }
+  .params-help-label { font-size: 11px; color: var(--text3); width: 100%; margin-bottom: 4px; }
+  .param-chip {
+    font-size: 11px; font-weight: 600; font-family: 'Courier New', monospace;
+    background: rgba(58,142,246,0.15); color: var(--accent2);
+    padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(58,142,246,0.2);
+    cursor: pointer; transition: all 0.1s; user-select: text;
+  }
+  .param-chip:hover { background: rgba(58,142,246,0.25); }
+
+  /* ─── EMAIL PREVIEW ─── */
+  .email-preview {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); padding: 14px; font-size: 12.5px; color: var(--text);
+    line-height: 1.7; white-space: pre-wrap; font-family: 'Courier New', monospace;
+    min-height: 80px; max-height: 200px; overflow-y: auto; word-break: break-word;
+  }
+
+  /* ─── SEND ─── */
+  .mailto-btn {
+    display: flex; align-items: center; gap: 6px; padding: 7px 16px;
+    background: var(--green-soft); border: 1px solid rgba(52,199,89,0.3);
+    color: var(--green); border-radius: var(--radius-sm); font-size: 12.5px;
+    font-weight: 600; text-decoration: none; transition: all 0.15s;
+    font-family: var(--font); cursor: pointer;
+  }
+  .mailto-btn:hover { background: rgba(52,199,89,0.25); transform: translateY(-1px); }
+
+  /* ─── OVERVIEW STATS ─── */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 26px; font-weight: 700; color: var(--text); }
+  .stat-sub { font-size: 11px; color: var(--text2); }
+
+  /* ─── MODAL ─── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    z-index: 1000; display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border2); border-radius: 14px;
+    padding: 24px; width: 480px; max-width: 95vw;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+    transform: scale(0.95); transition: transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform: scale(1); }
+  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+  /* ─── TOAST ─── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface3); border: 1px solid var(--border2);
+    border-radius: var(--radius); padding: 12px 16px; font-size: 13px;
+    font-weight: 500; color: var(--text); box-shadow: var(--shadow);
+    z-index: 2000; transform: translateY(80px); opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+
+  /* ─── SYNC INDICATOR ─── */
+  #sync-indicator {
+    font-size: 11px; color: var(--text3);
+    display: flex; align-items: center; gap: 4px; margin-left: 8px;
+  }
+  #sync-indicator .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    transition: background 0.3s;
+  }
+  #sync-indicator.saving .dot { background: var(--orange); }
+  #sync-indicator.error .dot { background: var(--red); }
+
+  /* ─── MISC ─── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+  .separator { height: 1px; background: var(--border); margin: 14px 0; }
+  .inline-code {
+    font-family: 'Courier New', monospace; font-size: 11.5px;
+    background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
+  }
+  .no-tours-msg { font-size: 12px; color: var(--text3); text-align: center; padding: 16px 8px; font-style: italic; }
+  @keyframes fadeSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ─── COLLAPSIBLE SIDEBAR ─── */
+  #sidebar {
+    transition: width 0.25s cubic-bezier(0.4,0,0.2,1),
+                min-width 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  #sidebar.collapsed {
+    width: 48px !important;
+    min-width: 48px !important;
+  }
+  #sidebar.collapsed .sidebar-label,
+  #sidebar.collapsed .sidebar-item .label,
+  #sidebar.collapsed .sidebar-item .badge,
+  #sidebar.collapsed .tours-count-badge,
+  #sidebar.collapsed .sidebar-tours,
+  #sidebar.collapsed .btn-new-tour,
+  #sidebar.collapsed .sidebar-section-header > *:not(.tours-count-badge),
+  #sidebar.collapsed #tours-count-label { display: none !important; }
+  #sidebar.collapsed .sidebar-item {
+    justify-content: center;
+    padding: 8px 0;
+  }
+  #sidebar.collapsed .sidebar-bottom { padding: 8px 4px; }
+  #sidebar.collapsed .sidebar-section { padding: 8px 4px 4px; }
+  #sidebar.collapsed .sidebar-collapsed-new {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 34px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sidebar-collapsed-new { display: none; }
+  .sidebar-collapsed-new:hover { background: #2a7be0 !important; }
+
+  #sidebar-toggle {
+    width: 28px; height: 28px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 13px;
+    transition: all 0.15s; flex-shrink: 0;
+    color: var(--text2);
+  }
+  #sidebar-toggle:hover { background: var(--surface3); color: var(--text); }
+
+  /* ─── AUTH FORM ─── */
+  .auth-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 20px 0; color: var(--text3); font-size: 12px;
+  }
+  .auth-divider::before, .auth-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border2);
+  }
+  .auth-input {
+    width: 100%; padding: 9px 12px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); font-size: 13px; color: var(--text);
+    font-family: var(--font); outline: none; transition: all 0.15s;
+    margin-bottom: 10px;
+  }
+  .auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(58,142,246,0.15); }
+  .auth-input::placeholder { color: var(--text3); }
+  .auth-btn {
+    width: 100%; padding: 10px; background: var(--accent); color: #fff;
+    border: none; border-radius: var(--radius-sm); font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: var(--font);
+    margin-bottom: 8px;
+  }
+  .auth-btn:hover { background: #2a7be0; }
+  .auth-btn.secondary {
+    background: var(--surface2); color: var(--text2);
+    border: 1px solid var(--border2);
+  }
+  .auth-btn.secondary:hover { background: var(--surface3); color: var(--text); }
+  .auth-toggle {
+    font-size: 12px; color: var(--text3); text-align: center; margin-top: 4px;
+  }
+  .auth-toggle a { color: var(--accent2); cursor: pointer; text-decoration: none; }
+  .auth-toggle a:hover { text-decoration: underline; }
+  .auth-reset { font-size: 11px; color: var(--text3); text-align: right; cursor: pointer; margin-bottom: 10px; }
+  .auth-reset:hover { color: var(--accent2); }
+  #signin-screen .signin-card { max-width: 420px; }
+  #signin-screen p { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<!-- ─── LOADING ─── -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p>Loading Tour Director Pro…</p>
+</div>
+
+<!-- ─── SIGN-IN SCREEN ─── -->
+<div id="signin-screen" style="display:none">
+  <div class="signin-card">
+    <div class="app-icon">🚌</div>
+    <h1>Tour Director Pro</h1>
+    <p>Sign in to access and sync your tours across all devices.</p>
+
+    <!-- Email/password form -->
+    <div id="auth-form">
+      <input class="auth-input" type="email" id="auth-email" placeholder="Email address" autocomplete="email"/>
+      <input class="auth-input" type="password" id="auth-password" placeholder="Password" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') submitAuthForm()"/>
+      <div id="auth-confirm-wrap" style="display:none">
+        <input class="auth-input" type="password" id="auth-password2" placeholder="Confirm password"/>
+      </div>
+      <div class="auth-reset" id="forgot-link" onclick="sendPasswordReset()">Forgot password?</div>
+      <button class="auth-btn" id="auth-submit-btn" onclick="submitAuthForm()">Sign In</button>
+      <div class="auth-toggle" id="auth-toggle-text">
+        Don't have an account? <a onclick="toggleAuthMode()">Create one</a>
+      </div>
+    </div>
+
+    <div class="auth-divider">or</div>
+
+    <!-- Google -->
+    <button class="google-btn" onclick="signInWithGoogle()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <div class="signin-error" id="signin-error"></div>
+  </div>
+</div>
+
+<!-- ─── MAIN APP ─── -->
+<div id="app" style="display:none">
+  <div id="titlebar">
+    <div id="titlebar-row1">
+      <div id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">◀</div>
+      <div id="titlebar-title">🚌 Tour Director Pro</div>
+    </div>
+    <div id="titlebar-row2">
+      <div id="user-badge">
+        <div id="sync-indicator" title="Sync status">
+          <div class="dot"></div>
+          <span id="sync-label">Synced</span>
+        </div>
+        <img id="user-avatar" src="" alt="" style="display:none"/>
+        <span id="user-name"></span>
+        <button id="sign-out-btn" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="layout">
+    <div id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Navigation</div>
+        <div class="sidebar-item active" onclick="showView('overview')" id="nav-overview" title="All Tours">
+          <span class="icon">🗂</span><span class="label"> All Tours</span>
+          <span class="badge" id="tours-badge">0</span>
+        </div>
+        <div class="sidebar-item" onclick="showView('providers-global')" id="nav-providers-global" title="Email Templates">
+          <span class="icon">📧</span><span class="label"> Email Templates</span>
+        </div>
+        <div class="sidebar-item" onclick="showView('config')" id="nav-config" title="Global Config">
+          <span class="icon">⚙️</span><span class="label"> Global Config</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+        <div class="sidebar-section-header">
+          <div class="sidebar-label" style="margin:0">Tours</div>
+          <span class="tours-count-badge" id="tours-count-label">0</span>
+        </div>
+        <div class="sidebar-tours" id="sidebar-tour-list">
+          <div class="no-tours-msg">No tours yet.<br>Create one below.</div>
+        </div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <button class="btn-new-tour" onclick="openNewTourModal()">＋ New Tour</button>
+        <button class="sidebar-collapsed-new" onclick="openNewTourModal()" title="New Tour">＋</button>
+      </div>
+    </div>
+
+    <div id="content">
+      <div id="toolbar">
+        <div class="toolbar-tabs" id="main-tabs" style="display:none">
+          <button class="tab-btn active" onclick="switchTab('details')" id="tab-details">Details</button>
+          <button class="tab-btn" onclick="switchTab('send')" id="tab-send">Send Emails</button>
+        </div>
+        <div id="toolbar-title" style="font-size:14px;font-weight:600;color:var(--text2)">All Tours</div>
+        <div class="ml-auto" id="toolbar-actions"></div>
+      </div>
+
+      <div id="panel-area">
+
+        <!-- OVERVIEW -->
+        <div class="panel active" id="panel-overview">
+          <div class="empty-state" id="empty-overview" style="display:none">
+            <div class="icon">🚌</div>
+            <h3>No Tours Yet</h3>
+            <p>Create your first tour to start managing bookings and provider emails.</p>
+            <button class="btn primary" onclick="openNewTourModal()" style="margin-top:8px">＋ Create First Tour</button>
+          </div>
+          <div id="overview-content">
+            <div class="stats-row">
+              <div class="stat-card">
+                <div class="stat-label">Total Tours</div>
+                <div class="stat-value" id="stat-tours">0</div>
+                <div class="stat-sub">managed</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Total Guests</div>
+                <div class="stat-value" id="stat-guests">0</div>
+                <div class="stat-sub">across all tours</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Upcoming</div>
+                <div class="stat-value" id="stat-upcoming">0</div>
+                <div class="stat-sub">tours ahead</div>
+              </div>
+            </div>
+            <div id="overview-tour-cards"></div>
+          </div>
+        </div>
+
+        <!-- TOUR DETAIL -->
+        <div class="panel" id="panel-tour">
+          <div id="tour-header-area"></div>
+          <div id="tab-panel-details" class="tab-panel"></div>
+          <div id="tab-panel-send" class="tab-panel" style="display:none"></div>
+        </div>
+
+        <!-- GLOBAL CONFIG -->
+        <div class="panel" id="panel-config">
+          <div class="section-card">
+            <div class="section-card-title" style="justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:8px;"><span>⚙️</span> Global Configuration</div>
+            </div>
+            <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:20px;">
+              Settings that apply across all tours. Values defined here are available as parameters in all email templates.
+            </p>
+
+            <div class="section-card-title" style="margin-bottom:12px;"><span>🧑‍✈️</span> Tour Director</div>
+            <div class="form-grid-2">
+              <div class="field">
+                <label>Tour Director Name</label>
+                <input type="text" id="config-director-name" placeholder="e.g. Sarah Mitchell"/>
+              </div>
+              <div class="field">
+                <label>Tour Director Email</label>
+                <input type="email" id="config-director-email" placeholder="e.g. sarah@tourco.com"/>
+              </div>
+              <div class="field">
+                <label>Tour Director Phone</label>
+                <input type="text" id="config-director-phone" placeholder="e.g. +61 400 000 000"/>
+              </div>
+            </div>
+
+            <div class="separator"></div>
+
+            <div class="section-card-title" style="margin-bottom:12px;"><span>🗂</span> Tour Defaults</div>
+            <p style="font-size:12.5px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
+              These values pre-populate the fields when creating a new tour.
+            </p>
+            <div class="form-grid-2">
+              <div class="field">
+                <label>Default Tour Code Prefix</label>
+                <input type="text" id="config-code-prefix" placeholder="e.g. QLD2025-"/>
+              </div>
+              <div class="field">
+                <label>Default Number of Crew</label>
+                <input type="number" id="config-default-crew" placeholder="e.g. 2" min="0"/>
+              </div>
+            </div>
+
+            <div class="separator"></div>
+
+            <div class="section-card-title" style="margin-bottom:10px;"><span>🔖</span> Available Parameters</div>
+            <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Use these in any email template subject or body:</p>
+            <div class="params-help">
+              <span class="param-chip" onclick="copyParam('{{tourDirector}}')">{{tourDirector}}</span>
+              <span class="param-chip" onclick="copyParam('{{tourDirectorEmail}}')">{{tourDirectorEmail}}</span>
+              <span class="param-chip" onclick="copyParam('{{tourDirectorPhone}}')">{{tourDirectorPhone}}</span>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;margin-top:20px;">
+              <button class="btn primary" onclick="saveGlobalConfig()">💾 Save Config</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- EMAIL TEMPLATES -->
+        <div class="panel" id="panel-providers-global">
+          <div class="section-card">
+            <div class="section-card-title" style="justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:8px;"><span>📧</span> Email Templates</div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn" onclick="importTemplates()">📥 Import</button>
+                <button class="btn success" onclick="exportTemplates()">📤 Export</button>
+              </div>
+            </div>
+            <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px;">
+              Templates are shared across all tours. Use parameters like <span class="inline-code">{{day1}}</span>,
+              <span class="inline-code">{{tourCode}}</span>, <span class="inline-code">{{guests}}</span>,
+              <span class="inline-code">{{totalGuests}}</span> in subjects and body text.
+            </p>
+            <div id="global-providers-list" class="provider-list"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NEW TOUR MODAL -->
+<div class="modal-overlay" id="modal-new-tour">
+  <div class="modal">
+    <div class="modal-title">🚌 New Tour</div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="field">
+        <label>Tour Code</label>
+        <input type="text" id="new-code" placeholder="e.g. QLD2025-A"/>
+        <div class="field-hint">Auto-incremented based on the most recent tour's code.</div>
+      </div>
+      <div class="form-grid-2">
+        <div class="field">
+          <label>Start Date</label>
+          <input type="date" id="new-date"/>
+          <div class="field-hint">Calculated from the next Ghan arrival date.</div>
+        </div>
+        <div class="field">
+          <label>Number of Days</label>
+          <select id="new-days">
+            <option value="1">1 Day</option><option value="2">2 Days</option>
+            <option value="3">3 Days</option><option value="4">4 Days</option>
+            <option value="5">5 Days</option><option value="6">6 Days</option>
+            <option value="7">7 Days</option><option value="8" selected>8 Days</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="field">
+          <label>Guests</label>
+          <input type="number" id="new-guests" placeholder="0" min="0"/>
+        </div>
+        <div class="field">
+          <label>Crew</label>
+          <input type="number" id="new-crew" placeholder="0" min="0"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-new-tour')">Cancel</button>
+      <button class="btn primary" onclick="createTour()">Create Tour</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let currentUser = null;
+
+let state = {
+  tours: [],
+  globalProviders: [],
+  globalConfig: {
+    directorName: '', directorEmail: '', directorPhone: '',
+    tourCodePrefix: '', defaultCrew: ''
+  },
+  activeTourId: null,
+  activeTab: 'details',
+  activeView: 'overview'
+};
+
+const DIETARY_OPTIONS = [
+  {key:'vegetarian',   label:'🥦 Vegetarian'},
+  {key:'vegan',        label:'🌱 Vegan'},
+  {key:'glutenFree',   label:'🌾 Gluten-Free'},
+  {key:'dairyFree',    label:'🥛 Dairy-Free'},
+  {key:'nutFree',      label:'🥜 Nut-Free'},
+  {key:'halal',        label:'☪️ Halal'},
+  {key:'kosher',       label:'✡️ Kosher'},
+  {key:'pescatarian',  label:'🐟 Pescatarian'},
+  {key:'eggFree',      label:'🥚 Egg-Free'},
+  {key:'seafoodAllergy',label:'🦐 Seafood Allergy'},
+  {key:'soyFree',      label:'🫘 Soy-Free'},
+  {key:'other',        label:'⚠️ Other'},
+];
+
+const PARAMS = [
+  '{{tourCode}}','{{guests}}','{{crew}}','{{totalGuests}}','{{dietary}}',
+  '{{tourDirector}}','{{tourDirectorEmail}}','{{tourDirectorPhone}}',
+  '{{day1}}','{{day2}}','{{day3}}','{{day4}}','{{day5}}','{{day6}}','{{day7}}','{{day8}}',
+  '{{startDate}}','{{endDate}}'
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIREBASE AUTH
+// ═══════════════════════════════════════════════════════════════════════════
+// ── AUTH MODE (signin / signup) ──────────────────────────────────────────────
+let authMode = 'signin'; // 'signin' | 'signup'
+
+function toggleAuthMode() {
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  const isSignup = authMode === 'signup';
+  document.getElementById('auth-submit-btn').textContent  = isSignup ? 'Create Account' : 'Sign In';
+  document.getElementById('auth-toggle-text').innerHTML   = isSignup
+    ? 'Already have an account? <a onclick="toggleAuthMode()">Sign in</a>'
+    : "Don't have an account? <a onclick='toggleAuthMode()'>Create one</a>";
+  document.getElementById('auth-confirm-wrap').style.display = isSignup ? 'block' : 'none';
+  document.getElementById('forgot-link').style.display       = isSignup ? 'none'  : 'block';
+  document.getElementById('signin-error').textContent = '';
+}
+
+function authError(msg) {
+  // Map Firebase error codes to friendly messages
+  const map = {
+    'auth/user-not-found':       'No account found with that email.',
+    'auth/wrong-password':       'Incorrect password.',
+    'auth/invalid-credential':   'Incorrect email or password.',
+    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/weak-password':        'Password must be at least 6 characters.',
+    'auth/invalid-email':        'Please enter a valid email address.',
+    'auth/too-many-requests':    'Too many attempts. Please try again later.',
+    'auth/popup-closed-by-user': 'Sign-in cancelled.',
+  };
+  return map[msg] || msg;
+}
+
+async function submitAuthForm() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('signin-error');
+  errEl.textContent = '';
+
+  if (!email || !pass) { errEl.textContent = 'Please enter your email and password.'; return; }
+
+  if (authMode === 'signup') {
+    const pass2 = document.getElementById('auth-password2').value;
+    if (pass !== pass2) { errEl.textContent = 'Passwords do not match.'; return; }
+    try {
+      await auth.createUserWithEmailAndPassword(email, pass);
+    } catch(err) { errEl.textContent = authError(err.code); }
+  } else {
+    try {
+      await auth.signInWithEmailAndPassword(email, pass);
+    } catch(err) { errEl.textContent = authError(err.code); }
+  }
+}
+
+async function sendPasswordReset() {
+  const email = document.getElementById('auth-email').value.trim();
+  const errEl = document.getElementById('signin-error');
+  if (!email) { errEl.textContent = 'Enter your email address above first.'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    errEl.style.color = 'var(--green)';
+    errEl.textContent = '✓ Reset email sent — check your inbox.';
+    setTimeout(() => { errEl.style.color = ''; errEl.textContent = ''; }, 5000);
+  } catch(err) { errEl.textContent = authError(err.code); }
+}
+
+function signInWithGoogle() {
+  document.getElementById('signin-error').textContent = '';
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    document.getElementById('signin-error').textContent = authError(err.code);
+  });
+}
+
+function signOut() {
+  if (!confirm('Sign out of Tour Director Pro?')) return;
+  auth.signOut();
+}
+
+// ── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const btn     = document.getElementById('sidebar-toggle');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  btn.textContent  = collapsed ? '▶' : '◀';
+  btn.title        = collapsed ? 'Show sidebar' : 'Hide sidebar';
+  try { localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0'); } catch(e){}
+}
+
+function restoreSidebarState() {
+  try {
+    if (localStorage.getItem('sidebarCollapsed') === '1') {
+      const sidebar = document.getElementById('sidebar');
+      const btn     = document.getElementById('sidebar-toggle');
+      sidebar.classList.add('collapsed');
+      btn.textContent = '▶';
+      btn.title = 'Show sidebar';
+    }
+  } catch(e){}
+}
+
+function showSignIn() {
+  document.getElementById('loading-overlay').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('signin-screen').style.display = 'flex';
+}
+
+function showApp() {
+  document.getElementById('loading-overlay').style.display = 'none';
+  document.getElementById('signin-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+}
+
+// ── APP INIT — runs after DOM is ready ────────────────────────────────────
+function initApp() {
+  const isConfigured = Object.values(firebaseConfig).every(v => !v.startsWith('YOUR_'));
+
+  if (!isConfigured) {
+    document.getElementById('loading-overlay').innerHTML = `
+      <div style="text-align:center;max-width:440px;padding:32px;">
+        <div style="font-size:48px;margin-bottom:16px;">🔧</div>
+        <h2 style="font-size:20px;font-weight:700;margin-bottom:10px;color:#f0f0f0;">Firebase Not Configured</h2>
+        <p style="font-size:13px;color:#a8a8a8;line-height:1.7;margin-bottom:20px;">
+          Open this file in a text editor and replace the placeholder values in the
+          <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">firebaseConfig</code>
+          block near the top with your project credentials.
+        </p>
+      </div>`;
+    return;
+  }
+
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+  } catch(e) {
+    document.getElementById('loading-overlay').innerHTML = `
+      <div style="text-align:center;max-width:400px;padding:32px;">
+        <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:10px;color:#f0f0f0;">Firebase Init Error</h2>
+        <p style="font-size:13px;color:#a8a8a8;line-height:1.7;">${e.message}</p>
+      </div>`;
+    return;
+  }
+
+  // Safety timeout in case onAuthStateChanged never fires
+  const authTimeout = setTimeout(() => {
+    console.warn('Auth timeout — showing sign-in');
+    showSignIn();
+  }, 10000);
+
+  auth.onAuthStateChanged(async user => {
+    clearTimeout(authTimeout);
+    try {
+      if (user) {
+        currentUser = user;
+        await loadFromFirestore();
+        showApp();
+
+        const avatar = document.getElementById('user-avatar');
+        avatar.src = user.photoURL || '';
+        avatar.style.display = user.photoURL ? 'block' : 'none';
+        document.getElementById('user-name').textContent = user.displayName || user.email;
+
+        restoreSidebarState();
+        if (state.activeTourId && state.activeView === 'tour') showView('tour');
+        else if (state.activeView === 'providers-global') showView('providers-global');
+        else if (state.activeView === 'config') showView('config');
+        else showView('overview');
+      } else {
+        showSignIn();
+      }
+    } catch(e) {
+      console.error('Auth state handler error:', e);
+      showSignIn();
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIRESTORE PATHS
+// ═══════════════════════════════════════════════════════════════════════════
+function userDoc(path) {
+  return db.doc(`users/${currentUser.uid}/${path}`);
+}
+function userCol(path) {
+  return db.collection(`users/${currentUser.uid}/${path}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOAD FROM FIRESTORE
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadFromFirestore() {
+  console.log('loadFromFirestore: starting, uid =', currentUser?.uid);
+  try {
+    // Load config
+    const cfgSnap = await userDoc('config/globalConfig').get();
+    if (cfgSnap.exists) {
+      state.globalConfig = { ...state.globalConfig, ...cfgSnap.data() };
+    }
+
+    // Load providers
+    const provSnap = await userCol('providers').orderBy('num').get();
+    state.globalProviders = provSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!state.globalProviders.length) state.globalProviders = [makeProvider(1)];
+
+    // Load tours
+    const toursSnap = await userCol('tours').get();
+    state.tours = toursSnap.docs.map(d => {
+      const t = { id: d.id, ...d.data() };
+      if (!t.dietary) t.dietary = {};
+      if (t.days === undefined) t.days = 8;
+      return t;
+    });
+
+    // Load nav state
+    const navSnap = await userDoc('config/navState').get();
+    if (navSnap.exists) {
+      const nav = navSnap.data();
+      state.activeTourId = nav.activeTourId || null;
+      state.activeTab    = nav.activeTab    || 'details';
+      state.activeView   = nav.activeView   || 'overview';
+      // Validate tour still exists
+      if (state.activeTourId && !state.tours.find(t => t.id === state.activeTourId)) {
+        state.activeTourId = null;
+        state.activeView   = 'overview';
+      }
+    }
+  } catch(err) {
+    console.error('Error loading from Firestore:', err.code, err.message);
+    showToast('⚠️ Load failed: ' + (err.code || err.message));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAVE TO FIRESTORE
+// Writes are batched where possible. Each entity type has its own save fn.
+// ═══════════════════════════════════════════════════════════════════════════
+function setSyncStatus(status) {
+  const el = document.getElementById('sync-indicator');
+  const lbl = document.getElementById('sync-label');
+  if (!el) return;
+  el.className = 'sync-indicator ' + (status || '');
+  lbl.textContent = status === 'saving' ? 'Saving…' : status === 'error' ? 'Error' : 'Synced';
+}
+
+async function saveTourToFirestore(tour) {
+  if (!currentUser) { console.warn('saveTourToFirestore: no currentUser'); return; }
+  if (!db) { console.warn('saveTourToFirestore: db not initialised'); return; }
+  setSyncStatus('saving');
+  try {
+    const { id, ...data } = tour;
+    const path = `users/${currentUser.uid}/tours/${id}`;
+    console.log('Saving tour to Firestore path:', path);
+    await db.doc(path).set(data);
+    console.log('Tour saved successfully:', tour.code);
+    setSyncStatus('');
+  } catch(err) {
+    console.error('Save tour error:', err.code, err.message);
+    setSyncStatus('error');
+    showToast('⚠️ Save failed: ' + (err.code || err.message));
+  }
+}
+
+async function deleteTourFromFirestore(id) {
+  if (!currentUser) return;
+  setSyncStatus('saving');
+  try {
+    await userDoc(`tours/${id}`).delete();
+    setSyncStatus('');
+  } catch(err) {
+    setSyncStatus('error');
+    showToast('⚠️ Failed to delete tour');
+  }
+}
+
+async function saveConfigToFirestore() {
+  if (!currentUser) return;
+  setSyncStatus('saving');
+  try {
+    await userDoc('config/globalConfig').set(state.globalConfig);
+    setSyncStatus('');
+  } catch(err) {
+    setSyncStatus('error');
+    showToast('⚠️ Failed to save config');
+  }
+}
+
+async function saveProvidersToFirestore() {
+  if (!currentUser) return;
+  setSyncStatus('saving');
+  try {
+    const batch = db.batch();
+    // Delete all existing provider docs then rewrite
+    const existing = await userCol('providers').get();
+    existing.docs.forEach(d => batch.delete(d.ref));
+    state.globalProviders.forEach((p, i) => {
+      const ref = userCol('providers').doc(String(i));
+      const { id: _id, ...data } = p;
+      batch.set(ref, { ...data, num: i + 1 });
+    });
+    await batch.commit();
+    setSyncStatus('');
+  } catch(err) {
+    setSyncStatus('error');
+    showToast('⚠️ Failed to save templates');
+  }
+}
+
+async function saveNavState() {
+  if (!currentUser) return;
+  try {
+    await userDoc('config/navState').set({
+      activeTourId: state.activeTourId || null,
+      activeTab:    state.activeTab,
+      activeView:   state.activeView
+    });
+  } catch(err) { /* non-critical */ }
+}
+
+// Compatibility shim — replaces the old localStorage saveState()
+async function saveState() {
+  // Called generically — save everything
+  await Promise.all([
+    saveConfigToFirestore(),
+    saveProvidersToFirestore(),
+    saveNavState()
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function makeProvider(num) {
+  return { num, name:'', toAddress:'', ccAddress:'', subject:'', body:'', dayRequired:'1' };
+}
+
+function makeTour(code, date, guests, crew, days) {
+  return {
+    id: String(Date.now()) + String(Math.random()).slice(2),
+    code, date,
+    guests: parseInt(guests)||0,
+    crew:   parseInt(crew)||0,
+    days:   parseInt(days)||8,
+    dietary: {}, dietaryNotes: '', notes: ''
+  };
+}
+
+function getTour() {
+  return state.tours.find(t => String(t.id) === String(state.activeTourId));
+}
+
+function tourIsPast(t) {
+  if (!t.date) return false;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const lastDay = new Date(t.date + 'T00:00:00');
+  lastDay.setDate(lastDay.getDate() + (parseInt(t.days)||8) - 1);
+  return lastDay < today;
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  return new Date(d+'T00:00:00').toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'});
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function copyParam(p) {
+  navigator.clipboard.writeText(p)
+    .then(() => showToast(`📋 Copied ${p}`))
+    .catch(() => showToast(`📋 ${p}`));
+}
+
+function buildDayDates(t) {
+  const days = t.days || 8;
+  if (!t.date) return Array.from({length:days}, (_,i) => `Day ${i+1} (TBD)`);
+  const start = new Date(t.date + 'T00:00:00');
+  return Array.from({length:days}, (_,i) => {
+    const d = new Date(start); d.setDate(d.getDate()+i);
+    return d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+  });
+}
+
+function buildDietString(t) {
+  const parts = [];
+  DIETARY_OPTIONS.forEach(d => {
+    const n = parseInt(t.dietary[d.key])||0;
+    if (n > 0) parts.push(`${n}x ${d.label.replace(/^\S+\s/,'')}`);
+  });
+  if (t.dietaryNotes) parts.push(t.dietaryNotes);
+  return parts.join(', ');
+}
+
+function getDietSummary(t) {
+  const parts = [];
+  DIETARY_OPTIONS.forEach(d => {
+    if (t.dietary[d.key] && parseInt(t.dietary[d.key])>0)
+      parts.push(`${t.dietary[d.key]}× ${d.label.split(' ').slice(1).join(' ')}`);
+  });
+  return parts.slice(0,3).join(', ') + (parts.length>3 ? ` +${parts.length-3} more` : '');
+}
+
+function resolveParams(str, t, dayDates, dietStr) {
+  if (!str) return '';
+  let s = str;
+  s = s.replace(/\{\{tourCode\}\}/g, t.code||'');
+  s = s.replace(/\{\{guests\}\}/g,   t.guests||'0');
+  s = s.replace(/\{\{crew\}\}/g,     t.crew||'0');
+  s = s.replace(/\{\{totalGuests\}\}/g, (parseInt(t.guests)||0)+(parseInt(t.crew)||0));
+  s = s.replace(/\{\{dietary\}\}/g,  dietStr||'None specified');
+  s = s.replace(/\{\{tourDirector\}\}/g,      state.globalConfig.directorName||'');
+  s = s.replace(/\{\{tourDirectorEmail\}\}/g, state.globalConfig.directorEmail||'');
+  s = s.replace(/\{\{tourDirectorPhone\}\}/g, state.globalConfig.directorPhone||'');
+  s = s.replace(/\{\{startDate\}\}/g, dayDates[0]||'TBD');
+  s = s.replace(/\{\{endDate\}\}/g,   dayDates[dayDates.length-1]||'TBD');
+  for (let i=1; i<=8; i++) {
+    s = s.replace(new RegExp(`\\{\\{day${i}\\}\\}`, 'g'), dayDates[i-1]||`Day ${i} TBD`);
+  }
+  return s;
+}
+
+function buildMailto(to, cc, subject, body) {
+  let link = `mailto:${encodeURIComponent(to||'')}`;
+  const params = [];
+  if (cc)      params.push(`cc=${encodeURIComponent(cc)}`);
+  if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
+  if (body)    params.push(`body=${encodeURIComponent(body)}`);
+  if (params.length) link += '?' + params.join('&');
+  return link;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════
+function showView(view) {
+  if (state.activeTourId) flushTourFields();
+  state.activeView = view;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('main-tabs').style.display = 'none';
+  document.getElementById('toolbar-title').style.display = 'block';
+  document.getElementById('toolbar-actions').innerHTML = '';
+
+  if (view === 'overview') {
+    document.getElementById('panel-overview').classList.add('active');
+    document.getElementById('nav-overview').classList.add('active');
+    document.getElementById('toolbar-title').textContent = 'All Tours';
+    renderOverview();
+    state.activeTourId = null;
+  } else if (view === 'config') {
+    document.getElementById('panel-config').classList.add('active');
+    document.getElementById('nav-config').classList.add('active');
+    document.getElementById('toolbar-title').textContent = 'Global Configuration';
+    renderConfigPanel();
+  } else if (view === 'providers-global') {
+    document.getElementById('panel-providers-global').classList.add('active');
+    document.getElementById('nav-providers-global').classList.add('active');
+    document.getElementById('toolbar-title').textContent = 'Email Templates';
+    renderGlobalProviders();
+  } else if (view === 'tour') {
+    document.getElementById('panel-tour').classList.add('active');
+    document.getElementById('main-tabs').style.display = 'flex';
+    document.getElementById('toolbar-title').style.display = 'none';
+    document.getElementById('toolbar-actions').innerHTML = `
+      <button class="btn danger" onclick="deleteTour('${state.activeTourId}')">🗑 Delete Tour</button>`;
+    renderTourPanel();
+  }
+  renderSidebar();
+  saveNavState();
+}
+
+function switchTab(tab) {
+  flushTourFields();
+  state.activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display='none');
+  document.getElementById('tab-panel-'+tab).style.display='block';
+  if (tab === 'send')    renderSendPanel();
+  if (tab === 'details') renderTourDetails();
+  saveNavState();
+}
+
+function selectTour(id) {
+  flushTourFields();
+  state.activeTourId = id;
+  state.activeTab = 'details';
+  showView('tour');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════════════════════
+function renderSidebar() {
+  const list = document.getElementById('sidebar-tour-list');
+  document.getElementById('tours-badge').textContent = state.tours.length;
+  document.getElementById('tours-count-label').textContent = state.tours.length;
+
+  if (!state.tours.length) {
+    list.innerHTML = '<div class="no-tours-msg">No tours yet.<br>Create one below.</div>';
+    return;
+  }
+  const sorted = [...state.tours].sort((a,b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1; if (!b.date) return -1;
+    return new Date(a.date) - new Date(b.date);
+  });
+  const upcoming = sorted.filter(t => !tourIsPast(t));
+  const past     = sorted.filter(t =>  tourIsPast(t));
+  const chip = t => `
+    <div class="tour-chip ${String(state.activeTourId)===String(t.id)?'active':''}" onclick="selectTour('${t.id}')">
+      <div class="info">
+        <div class="tname">${t.code||'Unnamed Tour'}</div>
+        <div class="tmeta">${t.date ? formatDate(t.date) : 'No date'} · ${t.guests}px</div>
+      </div>
+    </div>`;
+  let html = '';
+  if (upcoming.length) html += `<div class="sidebar-label" style="margin:6px 0 4px;">Upcoming</div>${upcoming.map(chip).join('')}`;
+  if (past.length)     html += `<div class="sidebar-label" style="margin:10px 0 4px;opacity:0.6;">Previous</div>${past.map(chip).join('')}`;
+  list.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════════════════════════════════════
+function renderOverview() {
+  document.getElementById('stat-tours').textContent   = state.tours.length;
+  document.getElementById('stat-guests').textContent  = state.tours.reduce((a,t)=>a+t.guests,0);
+  document.getElementById('stat-upcoming').textContent = state.tours.filter(t=>!tourIsPast(t)&&t.date).length;
+
+  const empty   = document.getElementById('empty-overview');
+  const content = document.getElementById('overview-content');
+  empty.style.display   = state.tours.length ? 'none' : 'flex';
+  content.style.display = state.tours.length ? 'block' : 'none';
+
+  const sorted = [...state.tours].sort((a,b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1; if (!b.date) return -1;
+    return new Date(a.date) - new Date(b.date);
+  });
+  const upcoming = sorted.filter(t => !tourIsPast(t));
+  const past     = sorted.filter(t =>  tourIsPast(t));
+
+  const card = t => {
+    const d = getDietSummary(t);
+    return `
+    <div class="section-card" style="cursor:pointer;margin-bottom:0;${tourIsPast(t)?'opacity:0.6;':''}" onclick="selectTour('${t.id}')">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:18px;">🚌</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;">${t.code||'Unnamed'}</div>
+          <div style="font-size:11.5px;color:var(--text3)">${t.date ? formatDate(t.date) : 'No date set'}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.guests}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Guests</div></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.crew}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Crew</div></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.days||8}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Days</div></div>
+      </div>
+      ${d ? `<div style="font-size:11.5px;color:var(--text2);">🍽 ${d}</div>` : ''}
+    </div>`;
+  };
+
+  const grid = (tours) =>
+    `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">${tours.map(card).join('')}</div>`;
+
+  let html = '';
+  if (upcoming.length) html += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text3);margin-bottom:10px;">Upcoming</div>${grid(upcoming)}`;
+  if (past.length)     html += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text3);margin-bottom:10px;${upcoming.length?'margin-top:24px;':''}">Previous Tours</div>${grid(past)}`;
+  document.getElementById('overview-tour-cards').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOUR PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+function renderTourPanel() {
+  const t = getTour(); if (!t) return;
+  document.getElementById('tour-header-area').innerHTML = `
+    <div class="tour-header">
+      <div class="tour-badge" style="background:var(--accent-soft);color:var(--accent2);">🚌</div>
+      <div class="tour-info">
+        <h2>${t.code||'Unnamed Tour'}</h2>
+        <div class="tour-meta">
+          <div class="meta-item">📅 ${t.date ? formatDate(t.date) : 'No date'}</div>
+          <div class="meta-item">👥 ${t.guests} guests</div>
+          <div class="meta-item">🎒 ${t.crew} crew</div>
+          <div class="meta-item">🗓 ${t.days||8} days</div>
+        </div>
+      </div>
+    </div>`;
+  document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');
+  document.getElementById('tab-panel-'+state.activeTab).style.display='block';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+state.activeTab).classList.add('active');
+  if (state.activeTab==='details') renderTourDetails();
+  else if (state.activeTab==='send') renderSendPanel();
+}
+
+// ─── DETAILS TAB ──────────────────────────────────────────────────────────
+function flushTourFields() {
+  const t = getTour(); if (!t) return;
+  const marker = document.getElementById('tour-form-id');
+  if (!marker || marker.dataset.tourId !== String(t.id)) return;
+  const g = id => document.getElementById(id);
+  if (g('field-code'))          t.code          = g('field-code').value.trim();
+  if (g('field-date'))          t.date          = g('field-date').value;
+  if (g('field-days'))          t.days          = parseInt(g('field-days').value)||8;
+  if (g('field-guests'))        t.guests        = parseInt(g('field-guests').value)||0;
+  if (g('field-crew'))          t.crew          = parseInt(g('field-crew').value)||0;
+  if (g('field-dietaryNotes'))  t.dietaryNotes  = g('field-dietaryNotes').value;
+  if (g('field-notes'))         t.notes         = g('field-notes').value;
+}
+
+function renderTourDetails() {
+  const t = getTour(); if (!t) return;
+  const panel = document.getElementById('tab-panel-details');
+  const dietRows = DIETARY_OPTIONS.map(d => {
+    const val = t.dietary[d.key] || '';
+    return `<div class="dietary-tag ${parseInt(val)>0?'selected':''}" id="dtag-${d.key}">
+      <span>${d.label}</span>
+      <input class="count-input" type="number" min="0" value="${val||''}" placeholder="0"
+        onclick="event.stopPropagation()"
+        oninput="updateDietary('${d.key}',this.value,this.closest('.dietary-tag'))"/>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div id="tour-form-id" data-tour-id="${t.id}"></div>
+    <div class="section-card">
+      <div class="section-card-title">📋 Tour Details</div>
+      <div class="form-grid">
+        <div class="field"><label>Tour Code</label><input type="text" id="field-code" value="${esc(t.code||'')}"/></div>
+        <div class="field"><label>Start Date</label><input type="date" id="field-date" value="${t.date||''}"/></div>
+        <div class="field"><label>Number of Days</label>
+          <select id="field-days">${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${(t.days||8)==n?'selected':''}>${n} Day${n>1?'s':''}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Number of Guests</label><input type="number" id="field-guests" min="0" value="${t.guests||''}"/></div>
+        <div class="field"><label>Number of Crew</label><input type="number" id="field-crew" min="0" value="${t.crew||''}"/></div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-card-title">🍽 Dietary Requirements</div>
+      <div class="dietary-grid">${dietRows}</div>
+      <div class="field" style="margin-top:14px;">
+        <label>Additional Dietary Notes</label>
+        <textarea id="field-dietaryNotes" placeholder="Specific allergies or notes...">${esc(t.dietaryNotes||'')}</textarea>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-card-title">📝 Tour Notes</div>
+      <div class="field">
+        <textarea id="field-notes" style="min-height:110px" placeholder="Internal notes about this tour...">${esc(t.notes||'')}</textarea>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+      <button class="btn primary" onclick="saveTourDetails()">💾 Save Changes</button>
+    </div>`;
+}
+
+function updateDietary(key, val, el) {
+  const t = getTour(); if (!t) return;
+  t.dietary[key] = val;
+  el.classList.toggle('selected', parseInt(val) > 0);
+}
+
+async function saveTourDetails() {
+  const t = getTour(); if (!t) return;
+  const g = id => document.getElementById(id);
+  if (g('field-code'))         t.code         = g('field-code').value.trim();
+  if (g('field-date'))         t.date         = g('field-date').value;
+  if (g('field-days'))         t.days         = parseInt(g('field-days').value)||8;
+  if (g('field-guests'))       t.guests       = parseInt(g('field-guests').value)||0;
+  if (g('field-crew'))         t.crew         = parseInt(g('field-crew').value)||0;
+  if (g('field-dietaryNotes')) t.dietaryNotes = g('field-dietaryNotes').value;
+  if (g('field-notes'))        t.notes        = g('field-notes').value;
+  await saveTourToFirestore(t);
+  showToast('✓ Tour saved');
+  renderSidebar();
+  document.getElementById('tour-header-area').innerHTML = '';
+  renderTourPanel();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GLOBAL CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
+function renderConfigPanel() {
+  const cfg = state.globalConfig;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val||''; };
+  set('config-director-name',  cfg.directorName);
+  set('config-director-email', cfg.directorEmail);
+  set('config-director-phone', cfg.directorPhone);
+  set('config-code-prefix',    cfg.tourCodePrefix);
+  set('config-default-crew',   cfg.defaultCrew);
+}
+
+async function saveGlobalConfig() {
+  const g = id => document.getElementById(id);
+  state.globalConfig.directorName   = g('config-director-name')  ?.value.trim() || '';
+  state.globalConfig.directorEmail  = g('config-director-email') ?.value.trim() || '';
+  state.globalConfig.directorPhone  = g('config-director-phone') ?.value.trim() || '';
+  state.globalConfig.tourCodePrefix = g('config-code-prefix')    ?.value.trim() || '';
+  state.globalConfig.defaultCrew    = g('config-default-crew')   ?.value        || '';
+  await saveConfigToFirestore();
+  showToast('✓ Config saved');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EMAIL TEMPLATES (PROVIDERS)
+// ═══════════════════════════════════════════════════════════════════════════
+function renderGlobalProviders() {
+  const panel = document.getElementById('global-providers-list');
+  panel.innerHTML =
+    state.globalProviders.map((p,i) => renderProviderCard(p,i)).join('') +
+    `<div style="margin-top:10px;">
+      <button class="btn primary" onclick="addProvider()" style="width:100%;justify-content:center;">＋ Add Email Template</button>
+    </div>`;
+}
+
+function renderProviderCard(p, i) {
+  const configured = !!(p.name || p.toAddress || p.body);
+  return `
+    <div class="provider-card" id="gp-${i}">
+      <button class="provider-header" onclick="toggleProvider(${i})">
+        <div class="provider-num">${i+1}</div>
+        <div class="provider-name-display">${esc(p.name) || `Provider ${i+1}`}</div>
+        <span class="provider-status ${configured?'configured':'empty'}">${configured?'Configured':'Empty'}</span>
+        <span class="provider-chevron">▶</span>
+      </button>
+      <div class="provider-body">
+        <div class="field"><label>Provider / Business Name</label>
+          <input type="text" id="pf-${i}-name" value="${esc(p.name)}" placeholder="e.g. Sunrise Lodge"/></div>
+        <div class="form-grid-2" style="margin-top:10px;">
+          <div class="field"><label>To Address</label>
+            <input type="email" id="pf-${i}-to" value="${esc(p.toAddress)}" placeholder="provider@example.com"/></div>
+          <div class="field"><label>CC Address (optional)</label>
+            <input type="email" id="pf-${i}-cc" value="${esc(p.ccAddress)}" placeholder="cc@example.com"/></div>
+        </div>
+        <div class="field" style="margin-top:10px;"><label>Tour Day Provider is Required</label>
+          <select id="pf-${i}-day">
+            ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${p.dayRequired==n?'selected':''}>Day ${n}</option>`).join('')}
+          </select>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="params-help">
+            <div class="params-help-label">Available parameters — click to copy:</div>
+            ${PARAMS.map(pr=>`<span class="param-chip" onclick="copyParam('${pr}')">${pr}</span>`).join('')}
+          </div>
+        </div>
+        <div class="field" style="margin-top:4px;"><label>Email Subject</label>
+          <input type="text" id="pf-${i}-subject" value="${esc(p.subject)}" placeholder="Booking – {{tourCode}} – {{day${p.dayRequired||1}}}"/></div>
+        <div class="field" style="margin-top:10px;"><label>Email Body</label>
+          <textarea id="pf-${i}-body" style="min-height:140px;" placeholder="Dear Team,&#10;&#10;Tour: {{tourCode}}&#10;Date: {{day${p.dayRequired||1}}}&#10;Guests: {{guests}}&#10;Dietary: {{dietary}}">${esc(p.body)}</textarea></div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <button class="btn danger" onclick="removeProvider(${i})" style="font-size:12px;">🗑 Remove</button>
+          <button class="btn primary" onclick="saveGlobalProviders()">💾 Save Template</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function toggleProvider(i) {
+  const card = document.getElementById(`gp-${i}`);
+  const wasOpen = card.classList.contains('open');
+  document.querySelectorAll('.provider-card').forEach(c=>c.classList.remove('open'));
+  if (!wasOpen) card.classList.add('open');
+}
+
+function flushProviderFields() {
+  state.globalProviders.forEach((p,i) => {
+    const g = id => document.getElementById(id);
+    if (g(`pf-${i}-name`))    p.name        = g(`pf-${i}-name`).value;
+    if (g(`pf-${i}-to`))      p.toAddress   = g(`pf-${i}-to`).value;
+    if (g(`pf-${i}-cc`))      p.ccAddress   = g(`pf-${i}-cc`).value;
+    if (g(`pf-${i}-day`))     p.dayRequired = g(`pf-${i}-day`).value;
+    if (g(`pf-${i}-subject`)) p.subject     = g(`pf-${i}-subject`).value;
+    if (g(`pf-${i}-body`))    p.body        = g(`pf-${i}-body`).value;
+  });
+}
+
+async function saveGlobalProviders() {
+  flushProviderFields();
+  await saveProvidersToFirestore();
+  showToast('✓ Templates saved');
+  renderGlobalProviders();
+}
+
+async function addProvider() {
+  flushProviderFields();
+  state.globalProviders.push(makeProvider(state.globalProviders.length+1));
+  await saveProvidersToFirestore();
+  renderGlobalProviders();
+  const idx = state.globalProviders.length-1;
+  const card = document.getElementById(`gp-${idx}`);
+  if (card) { card.classList.add('open'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  showToast('＋ Template added');
+}
+
+async function removeProvider(i) {
+  if (!confirm(`Remove template ${i+1} (${state.globalProviders[i].name||'Unnamed'})?`)) return;
+  flushProviderFields();
+  state.globalProviders.splice(i,1);
+  state.globalProviders.forEach((p,idx) => { p.num = idx+1; });
+  await saveProvidersToFirestore();
+  renderGlobalProviders();
+  showToast('🗑 Template removed');
+}
+
+// ─── EXPORT / IMPORT ──────────────────────────────────────────────────────
+function exportTemplates() {
+  flushProviderFields();
+  const blob = new Blob([JSON.stringify({
+    _type: 'TourManagerProTemplates', _version: 1,
+    exportedAt: new Date().toISOString(),
+    providers: state.globalProviders
+  }, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tour-templates-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('📤 Templates exported');
+}
+
+function importTemplates() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json,application/json';
+  input.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data._type !== 'TourManagerProTemplates') { alert('Not a valid template export file.'); return; }
+        if (!confirm(`Import ${data.providers.length} templates? This will replace current templates.`)) return;
+        state.globalProviders = data.providers;
+        state.globalProviders.forEach((p,i) => { p.num = i+1; });
+        await saveProvidersToFirestore();
+        renderGlobalProviders();
+        showToast('📥 Templates imported');
+      } catch(err) { alert('Failed to read file: ' + err.message); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEND TAB
+// ═══════════════════════════════════════════════════════════════════════════
+function renderSendPanel() {
+  const t = getTour(); if (!t) return;
+  flushProviderFields();
+  const g = id => document.getElementById(id);
+  if (g('field-code'))         t.code    = g('field-code')?.value.trim() || t.code;
+  if (g('field-date'))         t.date    = g('field-date')?.value        || t.date;
+  if (g('field-days'))         t.days    = parseInt(g('field-days')?.value)||t.days;
+  if (g('field-guests'))       t.guests  = parseInt(g('field-guests')?.value)||t.guests;
+  if (g('field-crew'))         t.crew    = parseInt(g('field-crew')?.value)||t.crew;
+  if (g('field-dietaryNotes')) t.dietaryNotes = g('field-dietaryNotes')?.value ?? t.dietaryNotes;
+
+  const dayDates = buildDayDates(t);
+  const dietStr  = buildDietString(t);
+  const configured = state.globalProviders.filter(p => p.toAddress || p.name);
+  const panel = document.getElementById('tab-panel-send');
+
+  if (!configured.length) {
+    panel.innerHTML = `
+      <div class="section-card">
+        <div class="empty-state" style="height:30vh;">
+          <div class="icon">📭</div><h3>No Providers Configured</h3>
+          <p>Add provider email templates in <strong>Email Templates</strong> (sidebar) first.</p>
+          <button class="btn primary" onclick="showView('providers-global')" style="margin-top:8px">Go to Email Templates</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const previews = state.globalProviders.map((p,i) => {
+    if (!p.toAddress && !p.name) return '';
+    const subject = resolveParams(p.subject||'', t, dayDates, dietStr);
+    const body    = resolveParams(p.body||'',    t, dayDates, dietStr);
+    const mailto  = buildMailto(p.toAddress, p.ccAddress, subject, body);
+    return `
+      <div class="section-card" style="margin-bottom:12px;padding:0;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;" onclick="toggleSendPreview(${i})">
+          <div class="provider-num">${i+1}</div>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;">${esc(p.name)||'Provider '+(i+1)}</div>
+            <div style="font-size:11.5px;color:var(--text3);">Day ${p.dayRequired||1} — ${dayDates[parseInt(p.dayRequired||1)-1]||'TBD'} · ${esc(p.toAddress)||'No address'}</div>
+          </div>
+          <a class="mailto-btn" href="${mailto}" onclick="event.stopPropagation()">📨 Open in Mail</a>
+          <span id="send-chevron-${i}" style="font-size:10px;color:var(--text3);margin-left:4px;transition:transform 0.2s;display:inline-block;">▶</span>
+        </div>
+        <div id="send-preview-${i}" style="display:none;padding:0 16px 16px;border-top:1px solid var(--border);">
+          <div style="height:12px;"></div>
+          <div style="margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;">To / CC</div>
+            <div style="font-size:12.5px;color:var(--text2);">${esc(p.toAddress)||'—'}${p.ccAddress?' · CC: '+esc(p.ccAddress):''}</div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;">Subject</div>
+            <div style="font-size:12.5px;color:var(--text);">${esc(subject)||'<em style="color:var(--text3)">No subject</em>'}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;">Body Preview</div>
+            <div class="email-preview">${esc(body)||'No body content.'}</div>
+          </div>
+        </div>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  panel.innerHTML = `
+    <div class="section-card" style="background:var(--accent-soft);border-color:rgba(58,142,246,0.2);">
+      <div class="section-card-title">📅 Tour Schedule Reference</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${dayDates.map((d,i)=>`<div style="background:var(--surface2);border-radius:6px;padding:6px 10px;font-size:12px;"><strong>Day ${i+1}</strong><br><span style="color:var(--text2)">${d}</span></div>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:12.5px;color:var(--text2);">
+        👥 <strong>${t.guests}</strong> guests &nbsp;·&nbsp; 🎒 <strong>${t.crew}</strong> crew &nbsp;·&nbsp; 🚌 <strong>${(parseInt(t.guests)||0)+(parseInt(t.crew)||0)}</strong> total on board
+      </div>
+      ${dietStr ? `<div style="margin-top:6px;font-size:12.5px;color:var(--text2);">🍽 <strong>Dietary:</strong> ${esc(dietStr)}</div>` : ''}
+    </div>
+    ${previews}`;
+}
+
+function toggleSendPreview(i) {
+  const body    = document.getElementById(`send-preview-${i}`);
+  const chevron = document.getElementById(`send-chevron-${i}`);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOUR CREATE / DELETE
+// ═══════════════════════════════════════════════════════════════════════════
+function nextTourCode() {
+  const prefix = state.globalConfig.tourCodePrefix || '';
+  if (!state.tours.length) return prefix;
+  const sorted = [...state.tours].filter(t=>t.date).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const latest = sorted.length ? sorted[0] : state.tours[state.tours.length-1];
+  if (!latest) return prefix;
+  const code   = latest.code || '';
+  const suffix = prefix && code.startsWith(prefix) ? code.slice(prefix.length) : code;
+  const match  = suffix.match(/(.*?)(\d+)(\D*)$/);
+  if (match) {
+    const padded = String(parseInt(match[2],10)+1).padStart(match[2].length,'0');
+    return prefix + match[1] + padded + match[3];
+  }
+  return prefix;
+}
+
+function nextTourStartDate() {
+  const withDates = state.tours.filter(t=>t.date);
+  if (!withDates.length) return '';
+  const latest  = withDates.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  const prev    = new Date(latest.date+'T00:00:00');
+  const dow     = prev.getDay();
+  const add     = dow===0 ? 9 : (dow===1||dow===4) ? 11 : 0;
+  if (!add) return '';
+  const next = new Date(prev); next.setDate(next.getDate()+add);
+  return next.toISOString().slice(0,10);
+}
+
+function openNewTourModal() {
+  const cfg = state.globalConfig;
+  document.getElementById('new-code').value   = nextTourCode();
+  document.getElementById('new-date').value   = nextTourStartDate();
+  document.getElementById('new-guests').value = '';
+  document.getElementById('new-crew').value   = cfg.defaultCrew || '';
+  document.getElementById('new-days').value   = '8';
+  document.getElementById('modal-new-tour').classList.add('open');
+  setTimeout(() => {
+    const el = document.getElementById('new-code'); el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, 200);
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function createTour() {
+  const code   = document.getElementById('new-code').value.trim();
+  const date   = document.getElementById('new-date').value;
+  const guests = document.getElementById('new-guests').value;
+  const crew   = document.getElementById('new-crew').value;
+  const days   = document.getElementById('new-days').value;
+  if (!code) { document.getElementById('new-code').focus(); return; }
+  flushTourFields();
+  ['field-code','field-date','field-days','field-guests','field-crew','field-dietaryNotes','field-notes']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const tour = makeTour(code, date, guests, crew, days);
+  state.tours.push(tour);
+  state.activeTourId = tour.id;
+  state.activeTab = 'details';
+  await saveTourToFirestore(tour);
+  closeModal('modal-new-tour');
+  renderSidebar();
+  showView('tour');
+  showToast('🚌 Tour created!');
+}
+
+async function deleteTour(id) {
+  if (!confirm('Delete this tour? This cannot be undone.')) return;
+  state.tours = state.tours.filter(t=>String(t.id)!==String(id));
+  state.activeTourId = null;
+  await deleteTourFromFirestore(id);
+  renderSidebar();
+  showView('overview');
+  showToast('🗑 Tour deleted');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ─── KEYBOARD ─────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('open'));
+  if ((e.metaKey||e.ctrlKey) && e.key==='n') { e.preventDefault(); openNewTourModal(); }
+});
+</script>
+</body>
+</html>
