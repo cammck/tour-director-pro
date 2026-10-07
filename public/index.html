@@ -872,12 +872,7 @@ let auth = null, db = null;
         </div>
         <div class="field">
           <label>Number of Days</label>
-          <select id="new-days">
-            <option value="1">1 Day</option><option value="2">2 Days</option>
-            <option value="3">3 Days</option><option value="4">4 Days</option>
-            <option value="5">5 Days</option><option value="6">6 Days</option>
-            <option value="7">7 Days</option><option value="8" selected>8 Days</option>
-          </select>
+          <input type="number" id="new-days" min="1" value="8" placeholder="8"/>
         </div>
       </div>
       <div class="form-grid-2">
@@ -936,7 +931,7 @@ const DIETARY_OPTIONS = [
 const PARAMS = [
   '{{tourCode}}','{{guests}}','{{crew}}','{{totalGuests}}','{{dietary}}',
   '{{tourDirector}}','{{tourDirectorEmail}}','{{tourDirectorPhone}}',
-  '{{day1}}','{{day2}}','{{day3}}','{{day4}}','{{day5}}','{{day6}}','{{day7}}','{{day8}}',
+  '{{day1}}','{{day2}}','{{day3}}','{{day4}}','{{day5}}','{{day6}}','{{day7}}','{{day8}}','{{day9}}','{{day10}}','{{day11}}','{{day12}}','{{day13}}','{{day14}}','{{day15}}','{{day16}}','{{day17}}','{{day18}}','{{day19}}','{{day20}}','{{day21}}','{{day22}}','{{day23}}','{{day24}}','{{day25}}','{{day26}}','{{day27}}','{{day28}}','{{day29}}','{{day30}}',
   '{{startDate}}','{{endDate}}'
 ];
 
@@ -1153,7 +1148,7 @@ async function loadFromFirestore() {
     state.tours = toursSnap.docs.map(d => {
       const t = { id: d.id, ...d.data() };
       if (!t.dietary) t.dietary = {};
-      if (t.days === undefined) t.days = 8;
+      if (t.days === undefined) t.days = 1;
       return t;
     });
 
@@ -1285,7 +1280,7 @@ function makeTour(code, date, guests, crew, days) {
     code, date,
     guests: parseInt(guests)||0,
     crew:   parseInt(crew)||0,
-    days:   parseInt(days)||8,
+    days:   parseInt(days)||1,
     dietary: {}, dietaryNotes: '', notes: ''
   };
 }
@@ -1298,7 +1293,7 @@ function tourIsPast(t) {
   if (!t.date) return false;
   const today = new Date(); today.setHours(0,0,0,0);
   const lastDay = new Date(t.date + 'T00:00:00');
-  lastDay.setDate(lastDay.getDate() + (parseInt(t.days)||8) - 1);
+  lastDay.setDate(lastDay.getDate() + (parseInt(t.days)||1) - 1);
   return lastDay < today;
 }
 
@@ -1319,7 +1314,7 @@ function copyParam(p) {
 }
 
 function buildDayDates(t) {
-  const days = t.days || 8;
+  const days = parseInt(t.days) || 1;
   if (!t.date) return Array.from({length:days}, (_,i) => `Day ${i+1} (TBD)`);
   const start = new Date(t.date + 'T00:00:00');
   return Array.from({length:days}, (_,i) => {
@@ -1360,7 +1355,8 @@ function resolveParams(str, t, dayDates, dietStr) {
   s = s.replace(/\{\{tourDirectorPhone\}\}/g, state.globalConfig.directorPhone||'');
   s = s.replace(/\{\{startDate\}\}/g, dayDates[0]||'TBD');
   s = s.replace(/\{\{endDate\}\}/g,   dayDates[dayDates.length-1]||'TBD');
-  for (let i=1; i<=8; i++) {
+  const maxDays = Math.max(dayDates.length, 30);
+  for (let i=1; i<=maxDays; i++) {
     s = s.replace(new RegExp(`\\{\\{day${i}\\}\\}`, 'g'), dayDates[i-1]||`Day ${i} TBD`);
   }
   return s;
@@ -1502,7 +1498,7 @@ function renderOverview() {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
         <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.guests}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Guests</div></div>
         <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.crew}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Crew</div></div>
-        <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.days||8}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Days</div></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:700;">${t.days||1}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Days</div></div>
       </div>
       ${d ? `<div style="font-size:11.5px;color:var(--text2);">🍽 ${d}</div>` : ''}
     </div>`;
@@ -1531,7 +1527,7 @@ function renderTourPanel() {
           <div class="meta-item">📅 ${t.date ? formatDate(t.date) : 'No date'}</div>
           <div class="meta-item">👥 ${t.guests} guests</div>
           <div class="meta-item">🎒 ${t.crew} crew</div>
-          <div class="meta-item">🗓 ${t.days||8} days</div>
+          <div class="meta-item">🗓 ${t.days||1} days</div>
         </div>
       </div>
     </div>`;
@@ -1551,7 +1547,7 @@ function flushTourFields() {
   const g = id => document.getElementById(id);
   if (g('field-code'))          t.code          = g('field-code').value.trim();
   if (g('field-date'))          t.date          = g('field-date').value;
-  if (g('field-days'))          t.days          = parseInt(g('field-days').value)||8;
+  if (g('field-days'))          t.days          = parseInt(g('field-days').value)||1;
   if (g('field-guests'))        t.guests        = parseInt(g('field-guests').value)||0;
   if (g('field-crew'))          t.crew          = parseInt(g('field-crew').value)||0;
   if (g('field-dietaryNotes'))  t.dietaryNotes  = g('field-dietaryNotes').value;
@@ -1579,7 +1575,7 @@ function renderTourDetails() {
         <div class="field"><label>Tour Code</label><input type="text" id="field-code" value="${esc(t.code||'')}"/></div>
         <div class="field"><label>Start Date</label><input type="date" id="field-date" value="${t.date||''}"/></div>
         <div class="field"><label>Number of Days</label>
-          <select id="field-days">${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${(t.days||8)==n?'selected':''}>${n} Day${n>1?'s':''}</option>`).join('')}</select>
+          <input type="number" id="field-days" min="1" value="${t.days||8}"/>
         </div>
         <div class="field"><label>Number of Guests</label><input type="number" id="field-guests" min="0" value="${t.guests||''}"/></div>
         <div class="field"><label>Number of Crew</label><input type="number" id="field-crew" min="0" value="${t.crew||''}"/></div>
@@ -1615,7 +1611,7 @@ async function saveTourDetails() {
   const g = id => document.getElementById(id);
   if (g('field-code'))         t.code         = g('field-code').value.trim();
   if (g('field-date'))         t.date         = g('field-date').value;
-  if (g('field-days'))         t.days         = parseInt(g('field-days').value)||8;
+  if (g('field-days'))         t.days         = parseInt(g('field-days').value)||1;
   if (g('field-guests'))       t.guests       = parseInt(g('field-guests').value)||0;
   if (g('field-crew'))         t.crew         = parseInt(g('field-crew').value)||0;
   if (g('field-dietaryNotes')) t.dietaryNotes = g('field-dietaryNotes').value;
@@ -1684,7 +1680,7 @@ function renderProviderCard(p, i) {
         </div>
         <div class="field" style="margin-top:10px;"><label>Tour Day Provider is Required</label>
           <select id="pf-${i}-day">
-            ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${p.dayRequired==n?'selected':''}>Day ${n}</option>`).join('')}
+            ${Array.from({length:30},(_,i)=>i+1).map(n=>`<option value="${n}" ${p.dayRequired==n?'selected':''}>Day ${n}</option>`).join('')}
           </select>
         </div>
         <div style="margin-top:12px;">
