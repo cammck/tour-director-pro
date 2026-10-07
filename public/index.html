@@ -29,6 +29,14 @@
            match /users/{userId}/{document=**} {
              allow read, write: if request.auth != null && request.auth.uid == userId;
            }
+           // Shared templates: any authenticated user can read,
+           // only the owner can write/delete their own
+           match /sharedTemplates/{docId} {
+             allow read: if request.auth != null;
+             allow create: if request.auth != null;
+             allow update, delete: if request.auth != null
+               && request.auth.uid == resource.data.sharedByUid;
+           }
          }
        }
   5. To deploy: install Firebase CLI (npm install -g firebase-tools),
@@ -520,6 +528,63 @@ let auth = null, db = null;
   .no-tours-msg { font-size: 12px; color: var(--text3); text-align: center; padding: 16px 8px; font-style: italic; }
   @keyframes fadeSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+  /* ─── SHARED TEMPLATES ─── */
+  .shared-card {
+    background: var(--surface);
+    border: 1px solid rgba(191,90,242,0.2);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 10px;
+    transition: border-color 0.15s;
+  }
+  .shared-card:hover { border-color: rgba(191,90,242,0.4); }
+  .shared-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; cursor: pointer;
+    background: transparent; border: none; width: 100%;
+    text-align: left; color: var(--text); font-family: var(--font);
+  }
+  .shared-header:hover { background: rgba(255,255,255,0.02); }
+  .shared-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 8px;
+    border-radius: 20px; background: rgba(191,90,242,0.15);
+    color: #bf5af2; white-space: nowrap; flex-shrink: 0;
+  }
+  .shared-by {
+    font-size: 11px; color: var(--text3); margin-top: 1px;
+  }
+  .shared-body {
+    display: none; padding: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .shared-card.open .shared-body { display: block; }
+  .shared-card.open .provider-chevron { transform: rotate(90deg); }
+  .shared-preview {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px;
+    font-size: 12px; color: var(--text2); line-height: 1.6;
+    white-space: pre-wrap; font-family: 'Courier New', monospace;
+    max-height: 160px; overflow-y: auto; margin-bottom: 10px;
+  }
+  .share-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid rgba(191,90,242,0.3);
+    background: rgba(191,90,242,0.1); color: #bf5af2;
+    transition: all 0.15s; font-family: var(--font);
+  }
+  .share-btn:hover { background: rgba(191,90,242,0.2); }
+  .share-btn.shared { background: rgba(191,90,242,0.2); }
+  .section-divider {
+    display: flex; align-items: center; gap: 10px;
+    margin: 20px 0 14px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.7px; color: var(--text3);
+  }
+  .section-divider::before, .section-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border2);
+  }
+
   /* ─── COLLAPSIBLE SIDEBAR ─── */
   #sidebar {
     transition: width 0.25s cubic-bezier(0.4,0,0.2,1),
@@ -834,6 +899,9 @@ let auth = null, db = null;
               <span class="inline-code">{{totalGuests}}</span> in subjects and body text.
             </p>
             <div id="global-providers-list" class="provider-list"></div>
+            <div id="shared-templates-section">
+              <!-- rendered by renderSharedTemplates() -->
+            </div>
           </div>
         </div>
 
@@ -892,6 +960,7 @@ let currentUser = null;
 let state = {
   tours: [],
   globalProviders: [],
+  sharedTemplates: [],
   globalConfig: {
     directorName: '', directorEmail: '', directorPhone: '',
     tourCodePrefix: '', defaultCrew: ''
@@ -1125,6 +1194,9 @@ async function loadFromFirestore() {
       if (t.days === undefined) t.days = 1;
       return t;
     });
+
+    // Load shared templates (global collection, readable by all authenticated users)
+    await loadSharedTemplates();
 
     // Load nav state
     const navSnap = await userDoc('config/navState').get();
@@ -1606,6 +1678,52 @@ function renderGlobalProviders() {
     `<div style="margin-top:10px;">
       <button class="btn primary" onclick="addProvider()" style="width:100%;justify-content:center;">＋ Add Email Template</button>
     </div>`;
+  renderSharedTemplates();
+}
+
+function renderSharedTemplates() {
+  const section = document.getElementById('shared-templates-section');
+  if (!section) return;
+  if (!state.sharedTemplates.length) {
+    section.innerHTML = '';
+    return;
+  }
+  const cards = state.sharedTemplates.map((t, i) => {
+    const isOwn = t.sharedByUid === currentUser?.uid;
+    return `
+      <div class="shared-card" id="st-${i}">
+        <button class="shared-header" onclick="toggleSharedCard(${i})">
+          <div style="flex:1;min-width:0;text-align:left;">
+            <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.name)||'Unnamed Template'}</div>
+            <div class="shared-by">Shared by ${esc(t.sharedBy)} · Day ${t.dayRequired||1}</div>
+          </div>
+          <span class="shared-badge">🌐 Shared</span>
+          ${isOwn ? `<button class="btn danger" onclick="event.stopPropagation();unshareTemplate('${t.id}')" style="font-size:11px;padding:3px 8px;">Unshare</button>` : ''}
+          <span class="provider-chevron" style="font-size:10px;color:var(--text3);transition:transform 0.2s;">▶</span>
+        </button>
+        <div class="shared-body">
+          <div style="margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;">Subject</div>
+            <div style="font-size:12.5px;color:var(--text);">${esc(t.subject)||'<em style="color:var(--text3)">No subject</em>'}</div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;">Body</div>
+            <div class="shared-preview">${esc(t.body)||'No body content.'}</div>
+          </div>
+          ${!isOwn ? `<button class="btn primary" onclick="copySharedTemplate('${t.id}')" style="width:100%;justify-content:center;">📋 Copy to My Templates</button>` : '<div style="font-size:11.5px;color:var(--text3);text-align:center;">This is your shared template</div>'}
+        </div>
+      </div>`;
+  }).join('');
+  section.innerHTML = `
+    <div class="section-divider">🌐 Shared by the Community</div>
+    ${cards}`;
+}
+
+function toggleSharedCard(i) {
+  const card = document.getElementById(`st-${i}`);
+  const wasOpen = card.classList.contains('open');
+  document.querySelectorAll('.shared-card').forEach(c => c.classList.remove('open'));
+  if (!wasOpen) card.classList.add('open');
 }
 
 function renderProviderCard(p, i) {
@@ -1642,9 +1760,14 @@ function renderProviderCard(p, i) {
           <input type="text" id="pf-${i}-subject" value="${esc(p.subject)}" placeholder="Booking – {{tourCode}} – {{day${p.dayRequired||1}}}"/></div>
         <div class="field" style="margin-top:10px;"><label>Email Body</label>
           <textarea id="pf-${i}-body" style="min-height:140px;" placeholder="Dear Team,&#10;&#10;Tour: {{tourCode}}&#10;Date: {{day${p.dayRequired||1}}}&#10;Guests: {{guests}}&#10;Dietary: {{dietary}}">${esc(p.body)}</textarea></div>
-        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <button class="btn danger" onclick="removeProvider(${i})" style="font-size:12px;">🗑 Remove</button>
-          <button class="btn primary" onclick="saveGlobalProviders()">💾 Save Template</button>
+          <div style="display:flex;gap:8px;">
+            <button class="share-btn ${p.sharedId?'shared':''}" onclick="toggleShareProvider(${i})">
+              ${p.sharedId ? '🌐 Shared' : '🔗 Share'}
+            </button>
+            <button class="btn primary" onclick="saveGlobalProviders()">💾 Save Template</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -1695,6 +1818,88 @@ async function removeProvider(i) {
   await saveProvidersToFirestore();
   renderGlobalProviders();
   showToast('🗑 Template removed');
+}
+
+// ─── SHARED TEMPLATES ────────────────────────────────────────────────────────
+async function loadSharedTemplates() {
+  if (!db) return;
+  try {
+    const snap = await db.collection('sharedTemplates').orderBy('sharedAt','desc').get();
+    state.sharedTemplates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(err) {
+    console.error('Load shared templates error:', err.code, err.message);
+  }
+}
+
+async function toggleShareProvider(i) {
+  flushProviderFields();
+  const p = state.globalProviders[i];
+  if (p.sharedId) {
+    await unshareTemplate(p.sharedId);
+    return;
+  }
+  if (!p.name && !p.body) { showToast('⚠️ Add a name and body before sharing'); return; }
+  setSyncStatus('saving');
+  try {
+    const doc = {
+      name:        p.name || '',
+      toAddress:   '',   // never share private email addresses
+      ccAddress:   '',
+      subject:     p.subject || '',
+      body:        p.body || '',
+      dayRequired: p.dayRequired || '1',
+      sharedBy:    currentUser.displayName || currentUser.email,
+      sharedByUid: currentUser.uid,
+      sharedAt:    firebase.firestore.FieldValue.serverTimestamp()
+    };
+    const ref = await db.collection('sharedTemplates').add(doc);
+    p.sharedId = ref.id;
+    await saveProvidersToFirestore();
+    await loadSharedTemplates();
+    renderGlobalProviders();
+    setSyncStatus('');
+    showToast('🌐 Template shared with all users');
+  } catch(err) {
+    setSyncStatus('error');
+    showToast('⚠️ Share failed: ' + (err.code || err.message));
+  }
+}
+
+async function unshareTemplate(sharedId) {
+  if (!confirm('Remove this template from the shared library?')) return;
+  setSyncStatus('saving');
+  try {
+    await db.collection('sharedTemplates').doc(sharedId).delete();
+    // Clear sharedId from the local provider
+    state.globalProviders.forEach(p => { if (p.sharedId === sharedId) delete p.sharedId; });
+    await saveProvidersToFirestore();
+    await loadSharedTemplates();
+    renderGlobalProviders();
+    setSyncStatus('');
+    showToast('🔗 Template unshared');
+  } catch(err) {
+    setSyncStatus('error');
+    showToast('⚠️ Unshare failed: ' + (err.code || err.message));
+  }
+}
+
+async function copySharedTemplate(sharedId) {
+  const t = state.sharedTemplates.find(t => t.id === sharedId);
+  if (!t) return;
+  flushProviderFields();
+  const newP = makeProvider(state.globalProviders.length + 1);
+  newP.name       = t.name;
+  newP.subject    = t.subject;
+  newP.body       = t.body;
+  newP.dayRequired = t.dayRequired;
+  state.globalProviders.push(newP);
+  await saveProvidersToFirestore();
+  renderGlobalProviders();
+  // Open the new card
+  const idx = state.globalProviders.length - 1;
+  const card = document.getElementById(`gp-${idx}`);
+  if (card) { card.classList.add('open'); card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  showToast('📋 Template copied to your templates');
 }
 
 // ─── EXPORT / IMPORT ──────────────────────────────────────────────────────
