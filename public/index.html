@@ -373,19 +373,7 @@ let auth = null, db = null;
   .field-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
 
   /* ─── DIETARY ─── */
-  .dietary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .dietary-tag {
-    display: flex; align-items: center; gap: 8px;
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: var(--radius-sm); padding: 7px 10px;
-    cursor: pointer; transition: all 0.15s; font-size: 12.5px; font-weight: 500;
-  }
-  .dietary-tag.selected { background: var(--accent-soft); border-color: rgba(58,142,246,0.4); color: var(--accent2); }
-  .dietary-tag .count-input {
-    width: 44px; background: var(--surface3); border: 1px solid var(--border2);
-    border-radius: 4px; padding: 2px 6px; font-size: 12px; color: var(--text);
-    text-align: center; margin-left: auto;
-  }
+
 
   /* ─── TOUR HEADER ─── */
   .tour-header {
@@ -913,20 +901,7 @@ let state = {
   activeView: 'overview'
 };
 
-const DIETARY_OPTIONS = [
-  {key:'vegetarian',   label:'🥦 Vegetarian'},
-  {key:'vegan',        label:'🌱 Vegan'},
-  {key:'glutenFree',   label:'🌾 Gluten-Free'},
-  {key:'dairyFree',    label:'🥛 Dairy-Free'},
-  {key:'nutFree',      label:'🥜 Nut-Free'},
-  {key:'halal',        label:'☪️ Halal'},
-  {key:'kosher',       label:'✡️ Kosher'},
-  {key:'pescatarian',  label:'🐟 Pescatarian'},
-  {key:'eggFree',      label:'🥚 Egg-Free'},
-  {key:'seafoodAllergy',label:'🦐 Seafood Allergy'},
-  {key:'soyFree',      label:'🫘 Soy-Free'},
-  {key:'other',        label:'⚠️ Other'},
-];
+
 
 const PARAMS = [
   '{{tourCode}}','{{guests}}','{{crew}}','{{totalGuests}}','{{dietary}}',
@@ -1147,7 +1122,6 @@ async function loadFromFirestore() {
     const toursSnap = await userCol('tours').get();
     state.tours = toursSnap.docs.map(d => {
       const t = { id: d.id, ...d.data() };
-      if (!t.dietary) t.dietary = {};
       if (t.days === undefined) t.days = 1;
       return t;
     });
@@ -1281,7 +1255,7 @@ function makeTour(code, date, guests, crew, days) {
     guests: parseInt(guests)||0,
     crew:   parseInt(crew)||0,
     days:   parseInt(days)||1,
-    dietary: {}, dietaryNotes: '', notes: ''
+    dietaryNotes: '', notes: ''
   };
 }
 
@@ -1324,22 +1298,12 @@ function buildDayDates(t) {
 }
 
 function buildDietString(t) {
-  const parts = [];
-  DIETARY_OPTIONS.forEach(d => {
-    const n = parseInt(t.dietary[d.key])||0;
-    if (n > 0) parts.push(`${n}x ${d.label.replace(/^\S+\s/,'')}`);
-  });
-  if (t.dietaryNotes) parts.push(t.dietaryNotes);
-  return parts.join(', ');
+  return t.dietaryNotes || '';
 }
 
 function getDietSummary(t) {
-  const parts = [];
-  DIETARY_OPTIONS.forEach(d => {
-    if (t.dietary[d.key] && parseInt(t.dietary[d.key])>0)
-      parts.push(`${t.dietary[d.key]}× ${d.label.split(' ').slice(1).join(' ')}`);
-  });
-  return parts.slice(0,3).join(', ') + (parts.length>3 ? ` +${parts.length-3} more` : '');
+  if (!t.dietaryNotes) return '';
+  return t.dietaryNotes.length > 60 ? t.dietaryNotes.slice(0, 60) + '…' : t.dietaryNotes;
 }
 
 function resolveParams(str, t, dayDates, dietStr) {
@@ -1557,16 +1521,6 @@ function flushTourFields() {
 function renderTourDetails() {
   const t = getTour(); if (!t) return;
   const panel = document.getElementById('tab-panel-details');
-  const dietRows = DIETARY_OPTIONS.map(d => {
-    const val = t.dietary[d.key] || '';
-    return `<div class="dietary-tag ${parseInt(val)>0?'selected':''}" id="dtag-${d.key}">
-      <span>${d.label}</span>
-      <input class="count-input" type="number" min="0" value="${val||''}" placeholder="0"
-        onclick="event.stopPropagation()"
-        oninput="updateDietary('${d.key}',this.value,this.closest('.dietary-tag'))"/>
-    </div>`;
-  }).join('');
-
   panel.innerHTML = `
     <div id="tour-form-id" data-tour-id="${t.id}"></div>
     <div class="section-card">
@@ -1575,7 +1529,7 @@ function renderTourDetails() {
         <div class="field"><label>Tour Code</label><input type="text" id="field-code" value="${esc(t.code||'')}"/></div>
         <div class="field"><label>Start Date</label><input type="date" id="field-date" value="${t.date||''}"/></div>
         <div class="field"><label>Number of Days</label>
-          <input type="number" id="field-days" min="1" value="${t.days||8}"/>
+          <input type="number" id="field-days" min="1" value="${t.days||1}"/>
         </div>
         <div class="field"><label>Number of Guests</label><input type="number" id="field-guests" min="0" value="${t.guests||''}"/></div>
         <div class="field"><label>Number of Crew</label><input type="number" id="field-crew" min="0" value="${t.crew||''}"/></div>
@@ -1583,10 +1537,9 @@ function renderTourDetails() {
     </div>
     <div class="section-card">
       <div class="section-card-title">🍽 Dietary Requirements</div>
-      <div class="dietary-grid">${dietRows}</div>
-      <div class="field" style="margin-top:14px;">
-        <label>Additional Dietary Notes</label>
-        <textarea id="field-dietaryNotes" placeholder="Specific allergies or notes...">${esc(t.dietaryNotes||'')}</textarea>
+      <div class="field">
+        <label>Dietary Notes</label>
+        <textarea id="field-dietaryNotes" placeholder="e.g. 2x vegetarian, 1x gluten-free, nut allergy...">${esc(t.dietaryNotes||'')}</textarea>
       </div>
     </div>
     <div class="section-card">
@@ -1600,11 +1553,7 @@ function renderTourDetails() {
     </div>`;
 }
 
-function updateDietary(key, val, el) {
-  const t = getTour(); if (!t) return;
-  t.dietary[key] = val;
-  el.classList.toggle('selected', parseInt(val) > 0);
-}
+
 
 async function saveTourDetails() {
   const t = getTour(); if (!t) return;
